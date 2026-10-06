@@ -1,0 +1,77 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'apexstore'
+version = '1.0'
+
+repositories { mavenCentral() }
+
+// Compila con el JDK instalado (17/21) pero genera bytecode compatible con Java 11
+tasks.withType(JavaCompile).configureEach { options.release = 11 }
+
+// === ICE ===
+// slice2java debe estar en el PATH (o definir ICE_HOME apuntando a la instalacion de Ice)
+def slice2java = System.getenv('ICE_HOME') ? "${System.getenv('ICE_HOME')}/bin/slice2java" : 'slice2java'
+def sliceDir = file('slice')
+def generatedDir = layout.buildDirectory.dir("generated-slice").get().asFile
+
+task generateSliceJava(type: Exec) {
+    description = 'Genera Java a partir del contrato Slice'
+    inputs.dir sliceDir
+    outputs.dir generatedDir
+    doFirst { generatedDir.mkdirs() }
+    commandLine slice2java,
+        '--output-dir', generatedDir.absolutePath,
+        new File(sliceDir, 'ApexStore.ice').absolutePath
+    ignoreExitValue = false
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir generatedDir
+        }
+    }
+}
+
+compileJava.dependsOn generateSliceJava
+
+dependencies {
+    implementation 'com.zeroc:ice:3.7.10'
+    implementation 'com.zeroc:icestorm:3.7.10'
+    implementation 'com.zeroc:icebox:3.7.10'
+}
+
+// === Tareas para arrancar cada nodo ===
+task runDatos(type: JavaExec) {
+    group = 'apexstore'
+    mainClass = 'apexstore.datos.ServidorDatos'
+    classpath = sourceSets.main.runtimeClasspath
+    workingDir = projectDir
+}
+
+task runPasarelas(type: JavaExec) {
+    group = 'apexstore'
+    mainClass = 'apexstore.pasarelas.ServidorPasarelas'
+    classpath = sourceSets.main.runtimeClasspath
+    workingDir = projectDir
+}
+
+task runBackend(type: JavaExec) {
+    group = 'apexstore'
+    mainClass = 'apexstore.backend.ServidorBackend'
+    classpath = sourceSets.main.runtimeClasspath
+    workingDir = projectDir
+}
+
+task runCliente(type: JavaExec) {
+    group = 'apexstore'
+    mainClass = 'apexstore.cliente.ClienteApexStore'
+    classpath = sourceSets.main.runtimeClasspath
+    workingDir = projectDir
+    if (project.hasProperty('carga')) {
+        args = ['--carga', project.property('carga')]
+    }
+}
